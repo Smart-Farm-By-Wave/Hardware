@@ -143,7 +143,7 @@ void smokeFireWaterFunction(void *param){
     /* --------------------------------------- */
     String json;
     // char* json = new char[1024];
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     doc["smoke"] = smoke;
     doc["fire"] = fire;
     doc["waterLevel"] = waterLevel;
@@ -179,7 +179,7 @@ void tempHumidRainFunction(void *param){
     // JSON Init
     String json;
     // char* json = new char[1024];
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     doc["temp"] = temp;
     doc["humidity"] = humidity;
     doc["rainAmount"] = rainAmount; 
