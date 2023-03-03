@@ -27,23 +27,23 @@ DHT dht(DHT_PIN, DHTTYPE);
 
 
 // Define Sending Struct
-// typedef struct data_messeage{
-//   float temp;
-//   float humidity;
-// } data_messasge;
+typedef struct data_messeage{
+  float temp;
+  float humidity;
+} data_messasge;
 
 // // Initial Struct
-// data_messasge myData;
+data_messasge myData;
 
 // Define MAC_ADDRESS
-// uint8_t broadcastAddress[] = {0x24, 0x6F, 0x28, 0x50, 0xB1, 0x30};
+uint8_t broadcastAddress[] = {0x24, 0x6F, 0x28, 0x50, 0xB1, 0x30};
 
 // Define Function
 void Connect_Wifi(); // For WiFi Connection
 void Setup_MQTT(); // For Inital MQTT
-// void Setup_communication(); // Establish ESP_NOW Connection
+void Setup_communication(); // Establish ESP_NOW Connection
 void callback(char* topic, byte* payload, unsigned int length); // MQTT Subscribe Callback
-// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status); // Callback when sent Data
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status); // Callback when sent Data
 
 
 // Task Function
@@ -85,7 +85,7 @@ void setup(){
 
   Connect_Wifi();
   Setup_MQTT();
-  // Setup_communication();
+  Setup_communication();
 
   // Sensor Init
   mq2.begin();
@@ -94,7 +94,7 @@ void setup(){
   // Create Task
   xTaskCreatePinnedToCore(smokeFireWaterFunction, "smokeFireWater", 1024*10, NULL, 0, &smokeFireWater, 0);
   xTaskCreatePinnedToCore(tempHumidRainFunction, "tempHumidRain", 1024*10, NULL,2, &tempHumidRain, 1);
-  // xTaskCreatePinnedToCore(sendDataToBoardFunction, "sendDataToBoard", 1024*10, NULL,0, &sendDataToBoard, 0);
+  xTaskCreatePinnedToCore(sendDataToBoardFunction, "sendDataToBoard", 1024, NULL,0, &sendDataToBoard, 0);
 }
 
 void loop(){
@@ -127,29 +127,29 @@ void callback(char* topic, byte* payload, unsigned int length){
   Serial.print("] ");
 }
 
-// void Setup_communication(){
-//    WiFi.mode(WIFI_STA);
-//   // สั่งให้เริ่ม ESP-NOW
-//   if (esp_now_init() != ESP_OK) {
-//     Serial.println("Error initializing ESP-NOW");
-//     return;
-//   }
+void Setup_communication(){
+   WiFi.mode(WIFI_AP_STA);
+  // สั่งให้เริ่ม ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
 
-//   //เมื่อส่งให้ทำฟังก์ชั่น OnDataSend ที่เราสร้างขึ้น
-//   esp_now_register_send_cb(OnDataSent);
+  //เมื่อส่งให้ทำฟังก์ชั่น OnDataSend ที่เราสร้างขึ้น
+  esp_now_register_send_cb(OnDataSent);
 
-//   // Register peer
-//   esp_now_peer_info_t peerInfo = {};
-//   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-//   peerInfo.channel = 0;
-//   peerInfo.encrypt = false;
+  // Register peer
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
 
-//   // เชื่อมต่ออุปกรณ์ที่ต้องการสื่อสาร
-//   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-//     Serial.println("Failed to add peer");
-//     return;
-//   }
-// }
+  // เชื่อมต่ออุปกรณ์ที่ต้องการสื่อสาร
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+}
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status){
   Serial.print("\r\nLast Packet Send Status:\t");
@@ -210,8 +210,8 @@ void tempHumidRainFunction(void *param){
     humidity = dht.readHumidity();
     // rain
     rainAmount = map(4096 - analogRead(RAIN_PIN), 1750, 2500, 0, 50);
-    if(waterLevel <= 0) waterLevel = 0;
-    if(waterLevel >= 50) waterLevel = 50;
+    if(rainAmount <= 0) waterLevel = 0;
+    if(rainAmount >= 50) waterLevel = 50;
     /* --------------------------------------- */
     // JSON Init
     String json;
@@ -234,20 +234,20 @@ void tempHumidRainFunction(void *param){
   }
 }
 
-// void sendDataToBoardFunction(void *param){
-//   while(1){
-//     myData.temp = temp;
-//     myData.humidity = humidity;
-//     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
-//     if (result == ESP_OK) {
-//       Serial.println("Sent with success");
-//     }
-//     else {
-//       Serial.println("Error sending the data");
-//     }
-//     vTaskDelay(1000/portTICK_PERIOD_MS);
-//   }
-// }
+void sendDataToBoardFunction(void *param){
+  while(1){
+    myData.temp = temp;
+    myData.humidity = humidity;
+    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
+    if (result == ESP_OK) {
+      Serial.println("Sent with success");
+    }
+    else {
+      Serial.println("Error sending the data");
+    }
+    vTaskDelay(5000/portTICK_PERIOD_MS);
+  }
+}
 
 
 

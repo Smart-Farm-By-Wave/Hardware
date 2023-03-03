@@ -20,17 +20,17 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);   //Module IIC/I2C Interface บางรุ
 
 
 // Define Sending Struct
-// typedef struct data_messeage{
-//   float temp;
-//   float humidity;
-// } data_messasge;
+typedef struct data_messeage{
+  float temp;
+  float humidity;
+} data_messasge;
 
 // Initial Struct
-// data_messasge myData;
+data_messasge myData;
 
 // Define Function
-// void Setup_communication();
-// void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len);
+void Setup_communication();
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len);
 void Connect_Wifi(); // For WiFi Connection
 void Setup_MQTT(); // For Inital MQTT
 void callback(char* topic, byte* payload, unsigned int length); // MQTT Subscribe Callback
@@ -68,7 +68,7 @@ void setup(){
   Connect_Wifi();
   Setup_MQTT();
   setupLCD();
-  // Setup_communication();
+  Setup_communication();
   lcd.print(12);
 
   // Create Task
@@ -81,28 +81,28 @@ void loop() {
 
 // Implement Function
 
-// void Setup_communication(){
-//   WiFi.mode(WIFI_STA);
-//   Serial.println(WiFi.macAddress());
+void Setup_communication(){
+  WiFi.mode(WIFI_STA);
+  Serial.println(WiFi.macAddress());
 
-//   // Init ESP-NOW
-//   if (esp_now_init() != ESP_OK) {
-//     Serial.println("Error initializing ESP-NOW");
-//     return;
-//   }
-//   // เมื่อรับข้อมูลมา ให้ทำในฟังก์ชั่น OnDataRecv ที่เราสร้างไว้
-//   esp_now_register_recv_cb(OnDataRecv);
-// }
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+  // เมื่อรับข้อมูลมา ให้ทำในฟังก์ชั่น OnDataRecv ที่เราสร้างไว้
+  esp_now_register_recv_cb(OnDataRecv);
+}
 
-// void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len){
-//   memcpy(&myData, incomingData, sizeof(myData));
-//   temp = myData.temp;
-//   humidity = myData.humidity;
-//   Serial.print("Temp: ");
-//   Serial.print(temp);
-//   Serial.print(" Humid: ");
-//   Serial.println(humidity);
-// }
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len){
+  memcpy(&myData, incomingData, sizeof(myData));
+  temp = myData.temp;
+  humidity = myData.humidity;
+  Serial.print("Temp: ");
+  Serial.print(temp);
+  Serial.print(" Humid: ");
+  Serial.println(humidity);
+}
 
 void Connect_Wifi(){
     WiFi.begin(ssid, password);
@@ -165,13 +165,14 @@ void callback(char* topic, byte* payload, unsigned int length){
 void readAndPrintDataFunction(void *param){
   while(1){
     
-    if(client.connect(mqtt_name,mqtt_user,mqtt_password)){
-      client.subscribe("embedded/plantStatus");
-      // Serial.println("Hello World");
-    }else{
-      Serial.println("failed");
-    }
+    // if(client.connect(mqtt_name,mqtt_user,mqtt_password)){
+    //   client.subscribe("embedded/plantStatus");
+    //   // Serial.println("Hello World");
+    // }else{
+    //   Serial.println("failed");
+    // }
+    printLCD();
     client.loop();
-    // vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(1000/portTICK_PERIOD_MS);
   }
 }
