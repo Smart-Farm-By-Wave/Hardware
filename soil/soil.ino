@@ -23,7 +23,7 @@ float moisture;
 
 // Config WiFi
 char *ssid = "Peanut";
-char *password = "0625901000";
+char *password = "password";
 
 // Config MQTT Server
 #define mqtt_server "broker.emqx.io"
@@ -34,6 +34,7 @@ char *password = "0625901000";
 
 // Other Define
 #define BUADRATE 115200
+#define BOARD_ID 1
 
 void setup(){
   Serial.begin(BUADRATE);
@@ -56,7 +57,7 @@ void loop(){
 
   const char* json_char = json.c_str();
   if(client.connect(mqtt_name,mqtt_user,mqtt_password)){
-      client.subscribe("embedded/test/watering/1");
+      client.subscribe("embedded/test/watering/",);
       client.publish("embedded/test/moisture", json_char);
       ;
     }else{
