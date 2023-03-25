@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <PubSubClient.h>
 #include <esp_now.h>
 #include <ArduinoJson.h>
@@ -6,6 +7,8 @@
 
 #include <MQ2.h>
 #include <DHT.h>
+#include <HCSR04.h>
+
 
 using namespace std;
 
@@ -15,6 +18,11 @@ using namespace std;
 #define FLAME_PIN 34 
 #define RAIN_PIN 39
 #define WATER_PIN 36
+// Define PIN for Ultrasonic
+#define TRIG_PIN 2
+#define ECHO_PIN_WATER 16
+#define ECHO_PIN_RAIN 17
+
 
 // Initial Instance
 #define DHTTYPE DHT11
@@ -24,6 +32,7 @@ PubSubClient client(espClient);
 
 MQ2 mq2(MQ2_PIN);
 DHT dht(DHT_PIN, DHTTYPE);
+HCSR04 hc(TRIG_PIN, new int[2]{ECHO_PIN_WATER, ECHO_PIN_RAIN,}, 2); //initialisation class HCSR04 (trig pin , echo pin)
 
 
 // Define Sending Struct
@@ -32,8 +41,15 @@ typedef struct data_messeage{
   float humidity;
 } data_messasge;
 
+// Define Sending Struct ldr
+typedef struct ldr_message{
+  bool light;
+  int board_id;
+} ldr_message;
+
 // // Initial Struct
 data_messasge myData;
+ldr_message ldrData;
 
 // Define MAC_ADDRESS
 uint8_t broadcastAddress[] = {0x24, 0x6F, 0x28, 0x50, 0xB1, 0x30};
@@ -44,17 +60,20 @@ void Setup_MQTT(); // For Inital MQTT
 void Setup_communication(); // Establish ESP_NOW Connection
 void callback(char* topic, byte* payload, unsigned int length); // MQTT Subscribe Callback
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status); // Callback when sent Data
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len);
 
 
 // Task Function
 void smokeFireWaterFunction(void *param);
 void tempHumidRainFunction(void *param);
 void sendDataToBoardFunction(void *param);
+void timerFunction(void *param);
 
-// Task Handler
+// Task Handle
 TaskHandle_t smokeFireWater = NULL;
 TaskHandle_t tempHumidRain = NULL;
 TaskHandle_t sendDataToBoard = NULL;
+TaskHandle_t timer = NULL;
 
 // Global Variable
 bool smoke;
@@ -63,17 +82,19 @@ float waterLevel;
 float rainAmount;
 float temp;
 float humidity;
+bool light;
+bool ldrStatus[] = {false,false,false,false}; // true = dark, false = day
 
 // Config WiFi
 char *ssid = "Peanut";
 char *password = "0625901000";
 
 // Config MQTT Server
-#define mqtt_server "broker.emqx.io"
+#define mqtt_server "192.168.18.107"
 #define mqtt_port 1883
 #define mqtt_user ""
 #define mqtt_password ""
-#define mqtt_name "Peanut"
+#define mqtt_name "Peanut0"
 
 // Other Define
 #define BUADRATE 115200
@@ -156,25 +177,47 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status){
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
 
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len){
+  memcpy(&ldrData, incomingData, sizeof(ldrData));
+  light = ldrData.light;
+  // Serial.print("Light: ");
+  // Serial.println(light);
+}
+
 
 // Implement Task Function
-
+int countTime = 0;
 void smokeFireWaterFunction(void *param){
   while(1){
-    Serial.println("Smoke");
     /* ---------- Read Sensor Value ---------- */
     // smoke
     float co = mq2.readCO();
     float smoke_analog = mq2.readSmoke();
-    smoke = false;
     // Fire
-    float flame = analogRead(FLAME_PIN);
-    fire = false;
+    bool flame = (analogRead(FLAME_PIN) ? false: true);
+    if(analogRead(FLAME_PIN) <= 500) {
+      fire = true;
+    }else{
+      fire = false;
+    }
+    
+    Serial.print("Flame: ");
+    Serial.println(flame);
+    Serial.println(analogRead(FLAME_PIN));
     // Water
-    waterLevel = map(4096 - analogRead(WATER_PIN),1750,2500,0,100);
+
+    // waterLevel = hc.dist(i);
+    Serial.print("Distance Water : ");
+    Serial.println(hc.dist(1)); // 2.04 Max , Min 10.46
+    
+    waterLevel = map(hc.dist(1),2,10.91, 0, 100 );
+    waterLevel = 100 - waterLevel;
+    if(waterLevel > 100) waterLevel = 100;
+    if(waterLevel < 0) waterLevel = 0;
+    // waterLevel = map(4096 - analogRead(WATER_PIN),1750,2500,0,100);
     // Serial.println(4096 - analogRead(WATER_PIN));
-    if(waterLevel <= 0) waterLevel = 0;
-    if(waterLevel >= 100) waterLevel = 100;
+    // if(waterLevel <= 0) waterLevel = 0;
+    // if(waterLevel >= 100) waterLevel = 100;
     /* --------------------------------------- */
     String json;
     // char* json = new char[1024];
@@ -195,6 +238,12 @@ void smokeFireWaterFunction(void *param){
       Serial.println("failed");
      }
     client.loop();
+    countTime += 1;
+    if(countTime >= 10){
+      // fire = !fire;
+      // smoke = !smoke;
+      countTime = 0;
+    }
     vTaskDelay(1000/portTICK_PERIOD_MS);
   }
 }
@@ -209,9 +258,11 @@ void tempHumidRainFunction(void *param){
     // humid
     humidity = dht.readHumidity();
     // rain
-    rainAmount = map(4096 - analogRead(RAIN_PIN), 1750, 2500, 0, 50);
+    rainAmount = map(18.19 - hc.dist(0),1,19, 0, 17 );
     if(rainAmount <= 0) waterLevel = 0;
-    if(rainAmount >= 50) waterLevel = 50;
+    if(rainAmount >= 17) waterLevel = 17;
+    Serial.print("Distance Rain : ");
+    Serial.println(hc.dist(0)); // 2.04 Max , Min
     /* --------------------------------------- */
     // JSON Init
     String json;
@@ -219,7 +270,7 @@ void tempHumidRainFunction(void *param){
     DynamicJsonDocument doc(2048);
     doc["temp"] = temp;
     doc["humidity"] = humidity;
-    doc["rainAmount"] = rainAmount; 
+    doc["rainAmount"] = waterLevel; 
 
     serializeJson(doc, json);
     // strcpy(json, temp_json);

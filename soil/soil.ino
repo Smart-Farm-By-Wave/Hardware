@@ -34,7 +34,6 @@ void Setup_communication(); // Establish ESP_NOW Connection
 void callback(char* topic, byte* payload, unsigned int length); // MQTT Subscribe Callback
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status); // Callback when sent Data
 
-// Task Function
 void soilMoistureFunction(void *param);
 void ldrFunction(void *param);
 
@@ -52,19 +51,22 @@ char *ssid = "Peanut";
 char *password = "0625901000";
 
 // Config MQTT Server
-#define mqtt_server "broker.emqx.io"
+#define mqtt_server "192.168.18.107"
 #define mqtt_port 1883
+// #define mqtt_server "0.0.0.0"
+// #define mqtt_port 1883
 #define mqtt_user ""
 #define mqtt_password ""
-#define mqtt_name "Peanut"
+#define mqtt_name "Peanut4"
 
 // Other Define
 #define BUADRATE 115200
-#define BOARD_ID 1 // Change Board ID
+#define BOARD_ID 4 // Change Board ID
 
 void setup(){
   Serial.begin(BUADRATE);
   pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH);
   Serial.println(digitalRead(RELAY_PIN)); 
 
   Connect_Wifi();
@@ -73,8 +75,6 @@ void setup(){
 
   // Create Task
   xTaskCreatePinnedToCore(soilMoistureFunction, "soilMoisture", 1024*10, NULL, 0, &soilMoisture, 0);
-  xTaskCreatePinnedToCore(ldrFunction, "ldr", 1024*10, NULL, 2, &ldr, 1);
-
 }
 
 void loop(){
@@ -84,10 +84,9 @@ void loop(){
 
 // Implement Function
 
-
-
 void Connect_Wifi(){
     WiFi.begin(ssid, password);
+    
     Serial.print("Connecting to WiFi");
     while (WiFi.status() != WL_CONNECTED)
     {
@@ -100,6 +99,12 @@ void Connect_Wifi(){
 
 void Setup_MQTT(){
   client.setServer(mqtt_server, mqtt_port);
+  if(client.connect(mqtt_name,mqtt_user,mqtt_password)){
+        client.subscribe("embedded/watering/4"); // Change Board ID
+
+    }else{
+      Serial.println("failed");
+    }
   client.setCallback(callback);  
 }
 
@@ -112,7 +117,7 @@ void callback(char* topic, byte* payload, unsigned int length){
   wateringStatus = doc["activate"];
   Serial.print("Activate : ");
   Serial.println(wateringStatus);
-  // digitalWrite(RELAY_PIN,wateringStatus);
+  digitalWrite(RELAY_PIN,wateringStatus);
 }
 
 void Setup_communication(){
@@ -157,6 +162,8 @@ void soilMoistureFunction(void *param){
     Serial.println(soil_moisture);
     /* ---------- Read Sensor Value ---------- */
     moisture = map(4095 - analogRead(SOIL_PIN), 0,4095,0,100);
+    Serial.print("Moisture : ");
+    Serial.println(moisture);
     /* --------------------------------------- */
     String json;
     DynamicJsonDocument doc(2048);
@@ -166,30 +173,10 @@ void soilMoistureFunction(void *param){
     serializeJson(doc,json);
 
     const char* json_char = json.c_str();
-    if(client.connect(mqtt_name,mqtt_user,mqtt_password)){
-        client.subscribe("embedded/watering/1"); // Change Board ID
-        client.publish("embedded/moisture", json_char);
-    }else{
-      Serial.println("failed");
-     }
+   
+    client.publish("embedded/moisture", json_char);
+    
     client.loop();
-    vTaskDelay(1000/portTICK_PERIOD_MS);
-  }
-}
-
-void ldrFunction(void *param){
-  while(1){
-    Serial.println(analogRead(LDR_PIN));
-    ldrStatus = (map(analogRead(LDR_PIN), 0,4000, 0, 100) >= 2800) ? true : false;
-    ldrData.light = ldrStatus;
-    ldrData.board_id = BOARD_ID;
-     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &ldrData, sizeof(ldrData));
-    if (result == ESP_OK) {
-      Serial.println("Sent with success");
-    }
-    else {
-      Serial.println("Error sending the data");
-    }
-    vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(2000/portTICK_PERIOD_MS);
   }
 }
