@@ -81,6 +81,5 @@ void loop() {
       } 
       ;
     } 
-    Serial.print("Fuck you");
-    delay(500);
+    delay(1000);
 }
